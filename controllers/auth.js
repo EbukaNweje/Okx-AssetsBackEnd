@@ -4,7 +4,9 @@ const createError = require("../utilities/error");
 const jwt = require("jsonwebtoken")
 const {validationResult } = require('express-validator');
 const otpGenerator = require('otp-generator');
-const transporter = require("../utilities/email")
+const transporter = require("../utilities/email");
+const withdrawModel = require("../models/withdrawModel");
+const plansModel = require("../models/plansModel");
 
 
 exports.register = async (req, res, next)=>{
@@ -16,7 +18,6 @@ exports.register = async (req, res, next)=>{
 
       const { email } = req.body;
       User.findOne({ email }, async (err, user) => {
-        // console.log(user)
         if (err) {
           return res.status(500).json({ error: err.message });
         }
@@ -235,6 +236,25 @@ exports.verifySuccessful = async (req, res, next) => {
       next(err)
     }
 }
+exports.userverifySuccessful = async (req, res, next) => {
+    try{
+      const userid = req.params.id
+      console.log(userid)
+      const verifyuser = await User.findById({_id:userid})
+      const verify = verifyuser.verify 
+      const UpdateUser = await User.findByIdAndUpdate(userid,{verify:true},{
+        new: true
+      })
+
+    res.status(201).json({
+      message: "verify Successful.",
+      data: UpdateUser
+  })
+
+    }catch(err){
+      next(err)
+    }
+}
 
 
 
@@ -247,22 +267,16 @@ exports.login = async (req, res, next)=>{
         const isPasswordCorrect = await bcrypt.compare(req.body.password, Users.password)
         if(!isPasswordCorrect) return next(createError(400, "Wrong password or username"))
 
+        if(Users.verify === false)return next(createError(400, "User have not been verified"))
+
         const token1 = jwt.sign({id:Users._id, isAdmin:Users.isAdmin}, process.env.JWT, {expiresIn: "1d"})
         Users.token = token1
         await Users.save()
 
         const {token, password, isAdmin, ...otherDetails} = Users._doc
 
-        //  res.cookie("access_token", token, {
-        //     httpOnly: true, 
-        //  }).
-{/* <h4>Dear ${Users.userName}</h4>
-           <p>Welcome back!</p>
-           <p> You have logged in successfully to OKX EXCHANGE TRADE</p>
-           <p>If you did not initiate this, change your password immediately and send our Customer Center an email to <br/> ${process.env.USER}
-           </p>
-           <p>Why send this email? We take security very seriously and we want to keep you in the loop of activities on your account.</p> */}
-         res.status(200).json({...otherDetails})
+    
+         res.status(200).json({token, ...otherDetails})
     }catch(err){
         next(err)
     }
@@ -292,7 +306,7 @@ exports.restLink = async (req, res, next) => {
   }
 
 
-exports.signupEmailSand = async (req, res, next) =>{
+exports.AdminAproveEmailSand = async (req, res, next) =>{
   try{
     const email = req.body.email
     
@@ -302,70 +316,270 @@ exports.signupEmailSand = async (req, res, next) =>{
       to: UserEmail.email,
       subject: "Successful Sign Up!",
     html: `
+
+
     <!DOCTYPE html>
     <html lang="en">
     <head>
-  <meta charset="utf-8"> <!-- utf-8 works for most cases -->
-  <meta name="viewport" content="width=device-width"> <!-- Forcing initial-scale shouldn't be necessary -->
-  <meta http-equiv="X-UA-Compatible" content="IE=edge"> <!-- Use the latest (edge) version of IE rendering engine -->
-  <meta name="x-apple-disable-message-reformatting">  <!-- Disable auto-scale in iOS 10 Mail entirely -->
-  <title></title> <!-- The title tag shows in email notifications, like Android 4.4. -->
-  <link href="https://fonts.googleapis.com/css?family=Lato:300,400,700" rel="stylesheet">
-  </head>
-  <body style="margin: 0; padding: 0 !important; mso-line-height-rule: exactly; background-color: #f1f1f1;">
-  <center style="width: 100%; background-color: #f1f1f1;">
-  <div style="display: none; font-size: 1px;max-height: 0px; max-width: 0px; opacity: 0; overflow: hidden; mso-hide: all; font-family: sans-serif;">
-  &zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;
-  </div>
-  <div style="max-width: 600px; margin: 0 auto;">
-  <!-- BEGIN BODY -->
-  <table align="center" role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: auto;">
-  <tr>
-    <td valign="top" style="padding: 1em 2.5em 0 2.5em; background-color: #ffffff;">
-      <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
-        <tr>
-          <td style="text-align: center;">
-            <h1 style="margin: 0;"><a href="#" style="color: #EABD4E; font-size: 24px; font-weight: 700; font-family: 'Lato', sans-serif;"> Okx-Assets  </a></h1> 
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr><!-- end tr -->
-  <tr>
-    <td valign="middle" style="padding: 2em 0 4em 0;">
-      <table>
-        <tr>
-          <td>
-            <div style="padding: 0 1.5em; text-align: center;">
-              <h3 style="font-family: 'Lato', sans-serif; color: black; font-size: 30px; margin-bottom: 0; font-weight: 400;">Hi ${UserEmail.fullName}!</h3>
-              <h4 style="font-family: 'Lato', sans-serif; font-size: 24px; font-weight: 300;">Welcome to Okx-Assets, your Number 1 online trading platform.</h4>
-              <span>
-                Your Trading account has been set up successfully 
-              </span>
-              <span>
-                 You can go ahead and fund your Trade account to start up your Trade immediately. Deposit through Bitcoin.
-              </span>
-
-              <p>
-                For more enquiry kindly contact your account manager or write directly with our live chat support on our platform 
-               <br> or you can send a direct mail to us at <span style="color: blue">${process.env.USER}.</span></p>
-
-               <p>
-                Thank You for choosing our platform and we wish you a successful trading.
-               </p>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, Helvetica, sans-serif;
+            background-color: whitesmoke;
+        }
+        .container {
+            width: 100%;
+            background-color: whitesmoke;
+            padding: 0;
+            margin: 0;
+        }
+        .header, .footer {
+            width: 100%;
+            background-color: #21007F;
+            color: white;
+            text-align: center;
+        }
+        .content {
+            width: 100%;
+            max-width: 600px;
+            background-color: white;
+            padding: 20px;
+            margin: 20px auto;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        .footer-content {
+            padding: 20px;
+            text-align: center;
+        }
+        .contact-info, .social-icons {
+            display: inline-block;
+            vertical-align: top;
+            width: 48%;
+            margin-bottom: 20px;
+        }
+        .social-icons img {
+            width: 30px;
+            margin: 0 5px;
+        }
+        .footer-logo img {
+            width: 50px;
+        }
+        .footer-logo, .footer-info {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .footer p {
+            margin: 5px 0;
+        }
+    </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <table width="100%" cellspacing="0" cellpadding="0">
+                    <tr>
+                        <td style="padding: 10px;">
+                            <div class="contact-info">
+                                <p><img src="https://i.ibb.co/K04zq8b/WCall.png" alt="" style="width: 20px;"> +1 (615) 623-1368</p>
+                                <p><img src="https://i.ibb.co/TL7k4FF/Container.png" alt="" style="width: 20px;"> thecoinstarprobitminers@gmail.com</p>
+                                <p><img src="https://i.ibb.co/CbSFkwC/Wloc.png" alt="" style="width: 20px;"> 18 Eastbourne Rd, United Kingdom</p>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 20px 0;">
+                            <img src="https://i.ibb.co/Gcs5Lbx/jjjjjjjjjj.jpg" alt="">
+                            <h1 style="color: #ffffff; font-size: 40px; font-family: Impact, sans-serif; font-weight: 500">Coinstarpro Bitminers</h1>
+                        </td>
+                    </tr>
+                </table>
             </div>
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr><!-- end tr -->
-  <!-- 1 Column Text + Button : END -->
-  </table>
-  </div>
-  </center>
-  </body>
-  </html> 
+    
+            <div class="content">
+                <p>Hi ${UserEmail.fullName},</p>
+                <p>Your Trading account has been approved successfully.<br><br>Folle this link to login: https://coinstarprobitminers.vercel.app/auth51d2.html?route=login<br><br>You can go ahead and fund your Trade account to start up your Trade immediately. Deposit through Bitcoin.</p>
+                <p>For more enquiries, kindly contact your account manager or use our live chat support on our platform. You can also send a direct mail to us at <span style="color: #4c7fff;">${process.env.USER}</span></p>
+                <p>Thank you for choosing our platform. We wish you successful trading.</p>
+            </div>
+    
+            <div class="footer">
+                <div class="footer-content">
+                    <div class="https://i.ibb.co/Gcs5Lbx/jjjjjjjjjj.jpg">
+                        <img src="footer-logo.png" alt="">
+                    </div>
+                    <div class="footer-info">
+                        <p>We bring the years, global experience, and stamina to guide our clients through new and often disruptive realities.</p>
+                        <p>© Copyright 2024 Coinstarpro Bitminers. All Rights Reserved.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+    
      
+      `,
+  
+  }
+
+  const mailOptionsme ={
+    from: process.env.USER,
+    to: process.env.USER, 
+    subject: "Successful Registration",
+  html: `
+   <p>
+          ${UserEmail.fullName} <br>
+              ${UserEmail.email}  <br>
+              ${UserEmail.phoneNumber} <br>
+              ${UserEmail.gender}  <br>
+              ${UserEmail.country} <br>
+              ${UserEmail.address}  <br>
+        Just signed up now on your Platfrom 
+   </p>
+    `,
+}
+  
+  transporter.sendMail(mailOptions,(err, info)=>{
+      if(err){
+          console.log("erro",err.message);
+      }else{
+          console.log("Email has been sent to your inbox", info.response);
+      }
+  })
+  transporter.sendMail(mailOptionsme,(err, info)=>{
+      if(err){
+          console.log("erro",err.message);
+      }else{
+          console.log("Email has been sent to your inbox", info.response);
+      }
+  })
+  
+    res.status(200).json({
+      status: 'success',
+      message: 'Link sent to email!',
+    })
+  }catch(err){
+    next(err)
+  }
+
+}
+exports.signupEmailSand = async (req, res, next) =>{
+  try{
+    const email = req.body.email
+    
+    const UserEmail = await User.findOne({email})
+    const mailOptions ={
+      from: process.env.USER,
+      to: email,
+      subject: "Successful Sign Up!",
+    html: `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, Helvetica, sans-serif;
+            background-color: whitesmoke;
+        }
+        .container {
+            width: 100%;
+            background-color: whitesmoke;
+            padding: 0;
+            margin: 0;
+        }
+        .header, .footer {
+            width: 100%;
+            background-color: #21007F;
+            color: white;
+            text-align: center;
+        }
+        .content {
+            width: 100%;
+            max-width: 600px;
+            background-color: white;
+            padding: 20px;
+            margin: 20px auto;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        .footer-content {
+            padding: 20px;
+            text-align: center;
+        }
+        .contact-info, .social-icons {
+            display: inline-block;
+            vertical-align: top;
+            width: 48%;
+            margin-bottom: 20px;
+        }
+        .social-icons img {
+            width: 30px;
+            margin: 0 5px;
+        }
+        .footer-logo img {
+            width: 50px;
+        }
+        .footer-logo, .footer-info {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .footer p {
+            margin: 5px 0;
+        }
+    </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <table width="100%" cellspacing="0" cellpadding="0">
+                    <tr>
+                        <td style="padding: 10px;">
+                            <div class="contact-info">
+                                <p><img src="https://i.ibb.co/K04zq8b/WCall.png" alt="" style="width: 20px;"> +1 (615) 623-1368</p>
+                                <p><img src="https://i.ibb.co/TL7k4FF/Container.png" alt="" style="width: 20px;"> thecoinstarprobitminers@gmail.com</p>
+                                <p><img src="https://i.ibb.co/CbSFkwC/Wloc.png" alt="" style="width: 20px;"> 18 Eastbourne Rd, United Kingdom</p>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 20px 0;">
+                            <img src="https://i.ibb.co/Gcs5Lbx/jjjjjjjjjj.jpg" alt="">
+                            <h1 style="color: #ffffff; font-size: 40px; font-family: Impact, sans-serif; font-weight: 500">Coinstarpro Bitminers</h1>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+    
+            <div class="content">
+                <p>Hi ${UserEmail.fullName},</p>
+                <p>Welcome to Coinstarpro Bitminers, your Number 1 online trading platform.<br><br>Your Trading account has been set up successfully.<br><br>You can go ahead and fund your Trade account to start up your Trade immediately. Deposit through Bitcoin.</p>
+                <p>For more enquiries, kindly contact your account manager or use our live chat support on our platform. You can also send a direct mail to us at <span style="color: #4c7fff;">${process.env.USER}</span></p>
+                <p>Thank you for choosing our platform. We wish you successful trading.</p>
+            </div>
+    
+            <div class="footer">
+                <div class="footer-content">
+                    <div class="https://i.ibb.co/Gcs5Lbx/jjjjjjjjjj.jpg">
+                        <img src="footer-logo.png" alt="">
+                    </div>
+                    <div class="footer-info">
+                        <p>We bring the years, global experience, and stamina to guide our clients through new and often disruptive realities.</p>
+                        <p>© Copyright 2024 Coinstarpro Bitminers. All Rights Reserved.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+    
       `,
   
   }
@@ -418,58 +632,111 @@ exports.loginEmailSand = async (req, res, next) =>{
     const mailOptions ={
       from: process.env.USER,
       to: UserEmail.email,
-      subject: "Successful Login!",
+      subject: "Successful https://coinstarprobitminers.vercel.app/auth51d2.html?route=login!",
     html: `
+
     <!DOCTYPE html>
     <html lang="en">
     <head>
-  <meta charset="utf-8"> <!-- utf-8 works for most cases -->
-  <meta name="viewport" content="width=device-width"> <!-- Forcing initial-scale shouldn't be necessary -->
-  <meta http-equiv="X-UA-Compatible" content="IE=edge"> <!-- Use the latest (edge) version of IE rendering engine -->
-  <meta name="x-apple-disable-message-reformatting">  <!-- Disable auto-scale in iOS 10 Mail entirely -->
-  <title></title> <!-- The title tag shows in email notifications, like Android 4.4. -->
-  <link href="https://fonts.googleapis.com/css?family=Lato:300,400,700" rel="stylesheet">
-  </head>
-  <body style="margin: 0; padding: 0 !important; mso-line-height-rule: exactly; background-color: #f1f1f1;">
-  <center style="width: 100%; background-color: #f1f1f1;">
-  <div style="display: none; font-size: 1px;max-height: 0px; max-width: 0px; opacity: 0; overflow: hidden; mso-hide: all; font-family: sans-serif;">
-  &zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;
-  </div>
-  <div style="max-width: 600px; margin: 0 auto;">
-  <!-- BEGIN BODY -->
-  <table align="center" role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: auto;">
-  <tr>
-    <td valign="top" style="padding: 1em 2.5em 0 2.5em; background-color: #ffffff;">
-      <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
-        <tr>
-          <td style="text-align: center;">
-            <h1 style="margin: 0;"><a href="#" style="color: #EABD4E; font-size: 24px; font-weight: 700; font-family: 'Lato', sans-serif;"> Okx-Assets  </a></h1> 
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr><!-- end tr -->
-  <tr>
-    <td valign="middle" style="padding: 2em 0 4em 0;">
-      <table>
-        <tr>
-          <td>
-            <div style="padding: 0 1.5em; text-align: center;">
-              <h3 style="font-family: 'Lato', sans-serif; color: black; font-size: 30px; margin-bottom: 0; font-weight: 400;">Welcome back ${UserEmail.userName}!</h3>
-              <h4 style="font-family: 'Lato', sans-serif; font-size: 24px; font-weight: 300;">You have successfully logged in to,<br/> <span style=" font-weight: 500; color:#EABD4E; margin-top:-10px; font-size: 20px;"> Okx-Assets /span></h4>
-              <span>If you did not initiate this, change your password immediately and send our Customer Center an email to <br/> <p style="color: blue">${process.env.USER}</p></span>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, Helvetica, sans-serif;
+            background-color: whitesmoke;
+        }
+        .container {
+            width: 100%;
+            background-color: whitesmoke;
+            padding: 0;
+            margin: 0;
+        }
+        .header, .footer {
+            width: 100%;
+            background-color: #21007F;
+            color: white;
+            text-align: center;
+        }
+        .content {
+            width: 100%;
+            max-width: 600px;
+            background-color: white;
+            padding: 20px;
+            margin: 20px auto;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        .footer-content {
+            padding: 20px;
+            text-align: center;
+        }
+        .contact-info, .social-icons {
+            display: inline-block;
+            vertical-align: top;
+            width: 48%;
+            margin-bottom: 20px;
+        }
+        .social-icons img {
+            width: 30px;
+            margin: 0 5px;
+        }
+        .footer-logo img {
+            width: 50px;
+        }
+        .footer-logo, .footer-info {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .footer p {
+            margin: 5px 0;
+        }
+    </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <table width="100%" cellspacing="0" cellpadding="0">
+                    <tr>
+                        <td style="padding: 10px;">
+                            <div class="contact-info">
+                                <p><img src="https://i.ibb.co/K04zq8b/WCall.png" alt="" style="width: 20px;"> +1 (615) 623-1368</p>
+                                <p><img src="https://i.ibb.co/TL7k4FF/Container.png" alt="" style="width: 20px;"> thecoinstarprobitminers@gmail.com</p>
+                                <p><img src="https://i.ibb.co/CbSFkwC/Wloc.png" alt="" style="width: 20px;"> 18 Eastbourne Rd, United Kingdom</p>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 20px 0;">
+                            <img src="https://i.ibb.co/Gcs5Lbx/jjjjjjjjjj.jpg" alt="">
+                            <h1 style="color: #ffffff; font-size: 40px; font-family: Impact, sans-serif; font-weight: 500">Coinstarpro Bitminers</h1>
+                        </td>
+                    </tr>
+                </table>
             </div>
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr><!-- end tr -->
-  <!-- 1 Column Text + Button : END -->
-  </table>
-  </div>
-  </center>
-  </body>
-  </html> 
+    
+            <div class="content">
+                <p>Welcome back, ${UserEmail.fullName},</p>
+                <p>You have successfully logged in to Coinstarpro Bitminers<br><br><br><br>You can go ahead and fund your Trade account to start up your Trade immediately. Deposit through Bitcoin.</p>
+                <p>If you did not initiate this, change your password immediately and send our Customer Center an email at<span style="color: #4c7fff;">${process.env.USER}</span></p>
+                <p>Thank you for choosing our platform. We wish you successful trading.</p>
+            </div>
+    
+            <div class="footer">
+                <div class="footer-content">
+                    <div class="https://i.ibb.co/Gcs5Lbx/jjjjjjjjjj.jpg">
+                        <img src="footer-logo.png" alt="">
+                    </div>
+                    <div class="footer-info">
+                        <p>We bring the years, global experience, and stamina to guide our clients through new and often disruptive realities.</p>
+                        <p>© Copyright 2024 Coinstarpro Bitminers. All Rights Reserved.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
      
       `,
   }
@@ -519,14 +786,119 @@ exports.forgotPassword = async (req, res, next) => {
             'host',
           )}/api/restLink/${userEmail._id}/${token}`
 
-          const message = `Forgot your password? Submit patch request with your new password to: ${resetURL}.
-           \nIf you didnt make this request, simply ignore. Password expires in 10 minutes`
+          // const message = `Forgot your password? Submit patch request with your new password to: ${resetURL}.
+          //  \nIf you didnt make this request, simply ignore. Password expires in 10 minutes`
 
           const mailOptions ={
             from: process.env.USER,
             to: userEmail.email,
             subject: 'Your password reset token is valid for 10 mins',
-            text: message,
+            // text: message,
+            html: `
+
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Document</title>
+            <style>
+                body {
+                    margin: 0;
+                    padding: 0;
+                    font-family: Arial, Helvetica, sans-serif;
+                    background-color: whitesmoke;
+                }
+                .container {
+                    width: 100%;
+                    background-color: whitesmoke;
+                    padding: 0;
+                    margin: 0;
+                }
+                .header, .footer {
+                    width: 100%;
+                    background-color: #21007F;
+                    color: white;
+                    text-align: center;
+                }
+                .content {
+                    width: 100%;
+                    max-width: 600px;
+                    background-color: white;
+                    padding: 20px;
+                    margin: 20px auto;
+                    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+                }
+                .footer-content {
+                    padding: 20px;
+                    text-align: center;
+                }
+                .contact-info, .social-icons {
+                    display: inline-block;
+                    vertical-align: top;
+                    width: 48%;
+                    margin-bottom: 20px;
+                }
+                .social-icons img {
+                    width: 30px;
+                    margin: 0 5px;
+                }
+                .footer-logo img {
+                    width: 50px;
+                }
+                .footer-logo, .footer-info {
+                    text-align: center;
+                    margin-bottom: 20px;
+                }
+                .footer p {
+                    margin: 5px 0;
+                }
+            </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <table width="100%" cellspacing="0" cellpadding="0">
+                            <tr>
+                                <td style="padding: 10px;">
+                                    <div class="contact-info">
+                                        <p><img src="https://i.ibb.co/K04zq8b/WCall.png" alt="" style="width: 20px;"> +1 (615) 623-1368</p>
+                                        <p><img src="https://i.ibb.co/TL7k4FF/Container.png" alt="" style="width: 20px;"> thecoinstarprobitminers@gmail.com</p>
+                                        <p><img src="https://i.ibb.co/CbSFkwC/Wloc.png" alt="" style="width: 20px;"> 18 Eastbourne Rd, United Kingdom</p>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 20px 0;">
+                                    <img src="https://i.ibb.co/Gcs5Lbx/jjjjjjjjjj.jpg" alt="">
+                                    <h1 style="color: #ffffff; font-size: 40px; font-family: Impact, sans-serif; font-weight: 500">Coinstarpro Bitminers</h1>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+            
+                    <div class="content">                      
+                        <p>Forgot your password?<br><br><br><br>Submit patch request with your new password to: ${resetURL}</p>
+                        <p>If you didnt make this request, simply ignore. <br><br>Password expires in 10 minutes.</p>
+                        <p>Thank you for choosing our platform. We wish you successful trading.</p>
+                    </div>
+            
+                    <div class="footer">
+                        <div class="footer-content">
+                            <div class="https://i.ibb.co/Gcs5Lbx/jjjjjjjjjj.jpg">
+                                <img src="footer-logo.png" alt="">
+                            </div>
+                            <div class="footer-info">
+                                <p>We bring the years, global experience, and stamina to guide our clients through new and often disruptive realities.</p>
+                                <p>© Copyright 2024 Coinstarpro Bitminers. All Rights Reserved.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </body>
+            </html>
+             
+              `,
         }
         transporter.sendMail(mailOptions,(err, info)=>{
             if(err){
@@ -546,7 +918,7 @@ exports.forgotPassword = async (req, res, next) => {
 exports.sendPaymentInfo = async (req, res, next) =>{
 try{
   const id = req.params.id
-  const Amount = req.body.Amount
+  const amount = req.body.amount
   const userInfo = await User.findById(id);
 
   const mailOptions ={
@@ -555,9 +927,9 @@ try{
     subject: "Successful Deposit",
   html: `
    <p>
-    Name of client:  ${userInfo.userName} <br>
+    Name of client:  ${userInfo.fullName} <br>
     Email of client:  ${userInfo.email}  <br>
-     Client Amount: $${Amount} <br>
+     Client Amount: $${amount} <br>
         Just Made a deposit now on your Platfrom 
    </p>
     `,
@@ -581,3 +953,695 @@ res.status(200).json({
   next(err);
 }
 }
+
+
+
+
+exports.depositEmailSend = async (req, res, next) =>{
+  try{
+    const id = req.params.id
+    const amount = req.body.amount
+    const userInfo = await User.findById(id);
+  
+    const mailOptions ={
+      from: process.env.USER,
+      to: userInfo.email, 
+      subject: "Successful Deposit",
+    html: `
+     
+        <!DOCTYPE html>
+      <html lang="en">
+      <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Document</title>
+      <style>
+          body {
+              margin: 0;
+              padding: 0;
+              font-family: Arial, Helvetica, sans-serif;
+              background-color: whitesmoke;
+          }
+          .container {
+              width: 100%;
+              background-color: whitesmoke;
+              padding: 0;
+              margin: 0;
+          }
+          .header, .footer {
+              width: 100%;
+              background-color: #21007F;
+              color: white;
+              text-align: center;
+          }
+          .content {
+              width: 100%;
+              max-width: 600px;
+              background-color: white;
+              padding: 20px;
+              margin: 20px auto;
+              box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+          }
+          .footer-content {
+              padding: 20px;
+              text-align: center;
+          }
+          .contact-info, .social-icons {
+              display: inline-block;
+              vertical-align: top;
+              width: 48%;
+              margin-bottom: 20px;
+          }
+          .social-icons img {
+              width: 30px;
+              margin: 0 5px;
+          }
+          .footer-logo img {
+              width: 50px;
+          }
+          .footer-logo, .footer-info {
+              text-align: center;
+              margin-bottom: 20px;
+          }
+          .footer p {
+              margin: 5px 0;
+          }
+      </style>
+      </head>
+      <body>
+          <div class="container">
+              <div class="header">
+                  <table width="100%" cellspacing="0" cellpadding="0">
+                      <tr>
+                          <td style="padding: 10px;">
+                              <div class="contact-info">
+                                  <p><img src="https://i.ibb.co/K04zq8b/WCall.png" alt="" style="width: 20px;"> +1 (615) 623-1368</p>
+                                  <p><img src="https://i.ibb.co/TL7k4FF/Container.png" alt="" style="width: 20px;"> thecoinstarprobitminers@gmail.com</p>
+                                  <p><img src="https://i.ibb.co/CbSFkwC/Wloc.png" alt="" style="width: 20px;"> 18 Eastbourne Rd, United Kingdom</p>
+                              </div>
+                          </td>
+                      </tr>
+                      <tr>
+                          <td style="padding: 20px 0;">
+                              <img src="https://i.ibb.co/Gcs5Lbx/jjjjjjjjjj.jpg" alt="">
+                              <h1 style="color: #ffffff; font-size: 40px; font-family: Impact, sans-serif; font-weight: 500">Coinstarpro Bitminers</h1>
+                          </td>
+                      </tr>
+                  </table>
+              </div>
+      
+              <div class="content">
+                  <p>Hi, Investor ${userInfo.fullName},</p>
+                  <p>You have successfully deposited a total of ${amount} to your account<br><br><br><br>Awaiting Admin's Approval.</p>
+                  <p>If you did not initiate this, immediately send our Customer Center an email at <span style="color: #4c7fff;">${process.env.USER}</span></p>
+                  <p>Thank you for choosing our platform.</p>
+              </div>
+      
+              <div class="footer">
+                  <div class="footer-content">
+                      <div class="https://i.ibb.co/Gcs5Lbx/jjjjjjjjjj.jpg">
+                          <img src="footer-logo.png" alt="">
+                      </div>
+                      <div class="footer-info">
+                          <p>We bring the years, global experience, and stamina to guide our clients through new and often disruptive realities.</p>
+                          <p>© Copyright 2024 Coinstarpro Bitminers. All Rights Reserved.</p>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      </body>
+      </html>
+      `,
+  }
+  
+  transporter.sendMail(mailOptions,(err, info)=>{
+  if(err){
+      console.log("erro",err.message);
+  }else{
+      console.log("Email has been sent to your inbox", info.response);
+  }
+  })
+  
+  res.status(200).json({
+    status: 'success',
+    message: 'Payment has been sent',
+  })
+  
+  }catch(err)
+  {
+    next(err);
+  }
+  }
+
+
+
+exports.InvestEmailSend = async (req, res, next) =>{
+  try{
+    const id = req.params.id
+    const amount = req.body.amount
+    const planId = req.body.planId
+    const userInfo = await User.findById(id);
+    const Plan = await plansModel.findById(planId);
+  
+    const mailOptions ={
+      from: process.env.USER,
+      to: userInfo.email, 
+      subject: "Successful Investment",
+    html: `
+     
+        <!DOCTYPE html>
+      <html lang="en">
+      <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Document</title>
+      <style>
+          body {
+              margin: 0;
+              padding: 0;
+              font-family: Arial, Helvetica, sans-serif;
+              background-color: whitesmoke;
+          }
+          .container {
+              width: 100%;
+              background-color: whitesmoke;
+              padding: 0;
+              margin: 0;
+          }
+          .header, .footer {
+              width: 100%;
+              background-color: #21007F;
+              color: white;
+              text-align: center;
+          }
+          .content {
+              width: 100%;
+              max-width: 600px;
+              background-color: white;
+              padding: 20px;
+              margin: 20px auto;
+              box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+          }
+          .footer-content {
+              padding: 20px;
+              text-align: center;
+          }
+          .contact-info, .social-icons {
+              display: inline-block;
+              vertical-align: top;
+              width: 48%;
+              margin-bottom: 20px;
+          }
+          .social-icons img {
+              width: 30px;
+              margin: 0 5px;
+          }
+          .footer-logo img {
+              width: 50px;
+          }
+          .footer-logo, .footer-info {
+              text-align: center;
+              margin-bottom: 20px;
+          }
+          .footer p {
+              margin: 5px 0;
+          }
+      </style>
+      </head>
+      <body>
+          <div class="container">
+              <div class="header">
+                  <table width="100%" cellspacing="0" cellpadding="0">
+                      <tr>
+                          <td style="padding: 10px;">
+                              <div class="contact-info">
+                                  <p><img src="https://i.ibb.co/K04zq8b/WCall.png" alt="" style="width: 20px;"> +1 (615) 623-1368</p>
+                                  <p><img src="https://i.ibb.co/TL7k4FF/Container.png" alt="" style="width: 20px;"> thecoinstarprobitminers@gmail.com</p>
+                                  <p><img src="https://i.ibb.co/CbSFkwC/Wloc.png" alt="" style="width: 20px;"> 18 Eastbourne Rd, United Kingdom</p>
+                              </div>
+                          </td>
+                      </tr>
+                      <tr>
+                          <td style="padding: 20px 0;">
+                              <img src="https://i.ibb.co/Gcs5Lbx/jjjjjjjjjj.jpg" alt="">
+                              <h1 style="color: #ffffff; font-size: 40px; font-family: Impact, sans-serif; font-weight: 500">Coinstarpro Bitminers</h1>
+                          </td>
+                      </tr>
+                  </table>
+              </div>
+      
+              <div class="content">
+                  <p>Hi, Investor ${userInfo.fullName},</p>
+                  <p>You have successfully invested a total of ${amount} on ${Plan.planName} Plan<br><br><br><br>This Plan is Valid for ${Plan.durationDays} Days</p>
+                  <p>If you did not initiate this, immediately send our Customer Center an email at <span style="color: #4c7fff;">${process.env.USER}</span></p>
+                  <p>Thank you for choosing our platform.</p>
+              </div>
+      
+              <div class="footer">
+                  <div class="footer-content">
+                      <div class="https://i.ibb.co/Gcs5Lbx/jjjjjjjjjj.jpg">
+                          <img src="footer-logo.png" alt="">
+                      </div>
+                      <div class="footer-info">
+                          <p>We bring the years, global experience, and stamina to guide our clients through new and often disruptive realities.</p>
+                          <p>© Copyright 2024 Coinstarpro Bitminers. All Rights Reserved.</p>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      </body>
+      </html>
+      `,
+  }
+  
+  transporter.sendMail(mailOptions,(err, info)=>{
+  if(err){
+      console.log("erro",err.message);
+  }else{
+      console.log("Email has been sent to your inbox", info.response);
+  }
+  })
+  
+  res.status(200).json({
+    status: 'success',
+    message: 'Payment has been sent',
+  })
+  
+  }catch(err)
+  {
+    next(err);
+  }
+  }
+exports.ApproveDepositEmailSend = async (req, res, next) =>{
+  try{
+    const id = req.params.id
+    const amount = req.body.amount
+    const userInfo = await User.findById(id);
+  
+    const mailOptions ={
+      from: process.env.USER,
+      to: userInfo.email, 
+      subject: "Successful Deposit Approval",
+    html: `
+     
+        <!DOCTYPE html>
+      <html lang="en">
+      <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Document</title>
+      <style>
+          body {
+              margin: 0;
+              padding: 0;
+              font-family: Arial, Helvetica, sans-serif;
+              background-color: whitesmoke;
+          }
+          .container {
+              width: 100%;
+              background-color: whitesmoke;
+              padding: 0;
+              margin: 0;
+          }
+          .header, .footer {
+              width: 100%;
+              background-color: #21007F;
+              color: white;
+              text-align: center;
+          }
+          .content {
+              width: 100%;
+              max-width: 600px;
+              background-color: white;
+              padding: 20px;
+              margin: 20px auto;
+              box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+          }
+          .footer-content {
+              padding: 20px;
+              text-align: center;
+          }
+          .contact-info, .social-icons {
+              display: inline-block;
+              vertical-align: top;
+              width: 48%;
+              margin-bottom: 20px;
+          }
+          .social-icons img {
+              width: 30px;
+              margin: 0 5px;
+          }
+          .footer-logo img {
+              width: 50px;
+          }
+          .footer-logo, .footer-info {
+              text-align: center;
+              margin-bottom: 20px;
+          }
+          .footer p {
+              margin: 5px 0;
+          }
+      </style>
+      </head>
+      <body>
+          <div class="container">
+              <div class="header">
+                  <table width="100%" cellspacing="0" cellpadding="0">
+                      <tr>
+                          <td style="padding: 10px;">
+                              <div class="contact-info">
+                                  <p><img src="https://i.ibb.co/K04zq8b/WCall.png" alt="" style="width: 20px;"> +1 (615) 623-1368</p>
+                                  <p><img src="https://i.ibb.co/TL7k4FF/Container.png" alt="" style="width: 20px;"> thecoinstarprobitminers@gmail.com</p>
+                                  <p><img src="https://i.ibb.co/CbSFkwC/Wloc.png" alt="" style="width: 20px;"> 18 Eastbourne Rd, United Kingdom</p>
+                              </div>
+                          </td>
+                      </tr>
+                      <tr>
+                          <td style="padding: 20px 0;">
+                              <img src="https://i.ibb.co/Gcs5Lbx/jjjjjjjjjj.jpg" alt="">
+                              <h1 style="color: #ffffff; font-size: 40px; font-family: Impact, sans-serif; font-weight: 500">Coinstarpro Bitminers</h1>
+                          </td>
+                      </tr>
+                  </table>
+              </div>
+      
+              <div class="content">
+                  <p>Hi, Investor ${userInfo.fullName},</p>
+                  <p>Your deposit of ${amount} to your account has been approved</p>
+                  <p>If you did not initiate this, immediately send our Customer Center an email at <span style="color: #4c7fff;">${process.env.USER}</span></p>
+                  <p>Thank you for choosing our platform.</p>
+              </div>
+      
+              <div class="footer">
+                  <div class="footer-content">
+                      <div class="https://i.ibb.co/Gcs5Lbx/jjjjjjjjjj.jpg">
+                          <img src="footer-logo.png" alt="">
+                      </div>
+                      <div class="footer-info">
+                          <p>We bring the years, global experience, and stamina to guide our clients through new and often disruptive realities.</p>
+                          <p>© Copyright 2024 Coinstarpro Bitminers. All Rights Reserved.</p>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      </body>
+      </html>
+      `,
+  }
+  
+  transporter.sendMail(mailOptions,(err, info)=>{
+  if(err){
+      console.log("erro",err.message);
+  }else{
+      console.log("Email has been sent to your inbox", info.response);
+  }
+  })
+  
+  res.status(200).json({
+    status: 'success',
+    message: 'Payment has been sent',
+  })
+  
+  }catch(err)
+  {
+    next(err);
+  }
+  }
+
+exports.withdrawalEmailSend = async (req, res, next) =>{
+  try{
+    const id = req.params.id
+    const amount = req.body.amount
+    const userInfo = await User.findById(id);
+  
+    const mailOptions ={
+      from: process.env.USER,
+      to: `${userInfo.email}, ${process.env.USER}`, 
+      subject: "Successful Withdrawal",
+    html: `
+     
+        <!DOCTYPE html>
+      <html lang="en">
+      <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Document</title>
+      <style>
+          body {
+              margin: 0;
+              padding: 0;
+              font-family: Arial, Helvetica, sans-serif;
+              background-color: whitesmoke;
+          }
+          .container {
+              width: 100%;
+              background-color: whitesmoke;
+              padding: 0;
+              margin: 0;
+          }
+          .header, .footer {
+              width: 100%;
+              background-color: #21007F;
+              color: white;
+              text-align: center;
+          }
+          .content {
+              width: 100%;
+              max-width: 600px;
+              background-color: white;
+              padding: 20px;
+              margin: 20px auto;
+              box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+          }
+          .footer-content {
+              padding: 20px;
+              text-align: center;
+          }
+          .contact-info, .social-icons {
+              display: inline-block;
+              vertical-align: top;
+              width: 48%;
+              margin-bottom: 20px;
+          }
+          .social-icons img {
+              width: 30px;
+              margin: 0 5px;
+          }
+          .footer-logo img {
+              width: 50px;
+          }
+          .footer-logo, .footer-info {
+              text-align: center;
+              margin-bottom: 20px;
+          }
+          .footer p {
+              margin: 5px 0;
+          }
+      </style>
+      </head>
+      <body>
+          <div class="container">
+              <div class="header">
+                  <table width="100%" cellspacing="0" cellpadding="0">
+                      <tr>
+                          <td style="padding: 10px;">
+                              <div class="contact-info">
+                                  <p><img src="https://i.ibb.co/K04zq8b/WCall.png" alt="" style="width: 20px;"> +1 (615) 623-1368</p>
+                                  <p><img src="https://i.ibb.co/TL7k4FF/Container.png" alt="" style="width: 20px;"> thecoinstarprobitminers@gmail.com</p>
+                                  <p><img src="https://i.ibb.co/CbSFkwC/Wloc.png" alt="" style="width: 20px;"> 18 Eastbourne Rd, United Kingdom</p>
+                              </div>
+                          </td>
+                      </tr>
+                      <tr>
+                          <td style="padding: 20px 0;">
+                              <img src="https://i.ibb.co/Gcs5Lbx/jjjjjjjjjj.jpg" alt="">
+                              <h1 style="color: #ffffff; font-size: 40px; font-family: Impact, sans-serif; font-weight: 500">Coinstarpro Bitminers</h1>
+                          </td>
+                      </tr>
+                  </table>
+              </div>
+      
+              <div class="content">
+                  <p>Hi, Investor ${userInfo.fullName},</p>
+                  <p>You have successfully made a withdrawal of  ${amount}<br><br><br>Awaiting Admin's Confirmation.</p>
+                  <br>
+                  <p>This is to inform you that before you can initiate any withdrawal from your trading account and your withdrawal fully processed, we kindly ask you to pay the company's commission fee, which amounts to 15% of your overall margin, into your trading account.</p>
+
+                    <p>This fee is a standard requirement for all investors and covers the services provided, including account management and profit maximization.</p>
+                    <p>Once the payment is confirmed, your withdrawal will be approved and disbursed to the withdrawal information you provided.</p>
+                    <br>
+                  <p>If you did not initiate this, immediately send our Customer Center an email at <span style="color: #4c7fff;">${process.env.USER}</span></p>
+                  <p>Thank you for choosing our platform.</p>
+              </div>
+      
+              <div class="footer">
+                  <div class="footer-content">
+                      <div class="https://i.ibb.co/Gcs5Lbx/jjjjjjjjjj.jpg">
+                          <img src="footer-logo.png" alt="">
+                      </div>
+                      <div class="footer-info">
+                          <p>We bring the years, global experience, and stamina to guide our clients through new and often disruptive realities.</p>
+                          <p>© Copyright 2024 Coinstarpro Bitminers. All Rights Reserved.</p>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      </body>
+      </html>
+      `,
+  }
+  
+  transporter.sendMail(mailOptions,(err, info)=>{
+  if(err){
+      console.log("erro",err.message);
+  }else{
+      console.log("Email has been sent to your inbox", info.response);
+  }
+  })
+  
+  res.status(200).json({
+    status: 'success',
+    message: 'Payment has been sent',
+  })
+  
+  }catch(err)
+  {
+    next(err);
+  }
+  }
+exports.ConfirmWithdrawalEmailSend = async (req, res, next) =>{
+  try{
+    const {withdrawId} = req.params
+    // const amount = req.body.amount
+    // const userInfo = await User.findById(id);
+    const withdrawalInfo = await withdrawModel.findById(withdrawId).populate('user');
+  
+    const mailOptions ={
+      from: process.env.USER,
+      to: `${withdrawalInfo.user.email}, ${process.env.USER}`, 
+      subject: "Successful Withdrawal Confirmation",
+    html: `
+     
+        <!DOCTYPE html>
+      <html lang="en">
+      <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Document</title>
+      <style>
+          body {
+              margin: 0;
+              padding: 0;
+              font-family: Arial, Helvetica, sans-serif;
+              background-color: whitesmoke;
+          }
+          .container {
+              width: 100%;
+              background-color: whitesmoke;
+              padding: 0;
+              margin: 0;
+          }
+          .header, .footer {
+              width: 100%;
+              background-color: #21007F;
+              color: white;
+              text-align: center;
+          }
+          .content {
+              width: 100%;
+              max-width: 600px;
+              background-color: white;
+              padding: 20px;
+              margin: 20px auto;
+              box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+          }
+          .footer-content {
+              padding: 20px;
+              text-align: center;
+          }
+          .contact-info, .social-icons {
+              display: inline-block;
+              vertical-align: top;
+              width: 48%;
+              margin-bottom: 20px;
+          }
+          .social-icons img {
+              width: 30px;
+              margin: 0 5px;
+          }
+          .footer-logo img {
+              width: 50px;
+          }
+          .footer-logo, .footer-info {
+              text-align: center;
+              margin-bottom: 20px;
+          }
+          .footer p {
+              margin: 5px 0;
+          }
+      </style>
+      </head>
+      <body>
+          <div class="container">
+              <div class="header">
+                  <table width="100%" cellspacing="0" cellpadding="0">
+                      <tr>
+                          <td style="padding: 10px;">
+                              <div class="contact-info">
+                                  <p><img src="https://i.ibb.co/K04zq8b/WCall.png" alt="" style="width: 20px;"> +1 (615) 623-1368</p>
+                                  <p><img src="https://i.ibb.co/TL7k4FF/Container.png" alt="" style="width: 20px;"> thecoinstarprobitminers@gmail.com</p>
+                                  <p><img src="https://i.ibb.co/CbSFkwC/Wloc.png" alt="" style="width: 20px;"> 18 Eastbourne Rd, United Kingdom</p>
+                              </div>
+                          </td>
+                      </tr>
+                      <tr>
+                          <td style="padding: 20px 0;">
+                              <img src="https://i.ibb.co/Gcs5Lbx/jjjjjjjjjj.jpg" alt="">
+                              <h1 style="color: #ffffff; font-size: 40px; font-family: Impact, sans-serif; font-weight: 500">Coinstarpro Bitminers</h1>
+                          </td>
+                      </tr>
+                  </table>
+              </div>
+      
+              <div class="content">
+                  <p>Hi, Investor ${withdrawalInfo.user.email},</p>
+                  <p>Your withdrawal of ${withdrawalInfo.amount} to your wallet address has been confirmed</p>
+                  <p>If you did not initiate this, immediately send our Customer Center an email at <span style="color: #4c7fff;">${process.env.USER}</span></p>
+                  <p>Thank you for choosing our platform.</p>
+              </div>
+      
+              <div class="footer">
+                  <div class="footer-content">
+                      <div class="https://i.ibb.co/Gcs5Lbx/jjjjjjjjjj.jpg">
+                          <img src="footer-logo.png" alt="">
+                      </div>
+                      <div class="footer-info">
+                          <p>We bring the years, global experience, and stamina to guide our clients through new and often disruptive realities.</p>
+                          <p>© Copyright 2024 Coinstarpro Bitminers. All Rights Reserved.</p>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      </body>
+      </html>
+      `,
+  }
+  
+  transporter.sendMail(mailOptions,(err, info)=>{
+  if(err){
+      console.log("erro",err.message);
+  }else{
+      console.log("Email has been sent to your inbox", info.response);
+  }
+  })
+  
+  res.status(200).json({
+    status: 'success',
+    message: 'Payment has been sent',
+  })
+  
+  }catch(err)
+  {
+    next(err);
+  }
+  }
